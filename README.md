@@ -52,6 +52,8 @@ rated and fix anything you skipped or exited by accident.
 2. The service starts automatically. Configure it under
    **Add-ons > My add-ons > Program add-ons > JellyRate > Configure**.
 
+Or install the [DeliciousCoffee repository](https://github.com/c0def0rc0ffee/DeliciousCoffee) once and Kodi installs and updates it for you.
+
 For a sandboxed Flatpak Kodi (which cannot read a zip outside its sandbox),
 drop the folder straight into the add-ons directory instead:
 
@@ -70,6 +72,7 @@ Then restart Kodi.
 | Enable rating prompt | On | Master switch |
 | Also prompt when you stop early | On | Prompt on Stop, not just natural end |
 | Only prompt after watching at least (%) | 70 | Skip the prompt for brief plays |
+| Also save the score in JellyStat | On | When [JellyStat](https://github.com/c0def0rc0ffee/JellyStat) is installed, the score is recorded in its library mirror too, so the title leaves its rating queue. Best effort: JellyStat missing is normal, and the rating has already reached Jellyfin either way |
 | Default rating shown on the stars | 5 | Where the stars start |
 
 ## Notes and limitations
