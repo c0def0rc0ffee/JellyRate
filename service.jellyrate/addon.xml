@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  <summary>
+  Kodi add-on manifest for JellyRate: a background service that asks for
+  a rating after playback, plus a launchable script that browses recent
+  ratings. The version attribute is stamped by tools/addon_version.py.
+  </summary>
+-->
+<addon id="service.jellyrate"
+       name="JellyRate"
+       version="1.4.1"
+       provider-name="c0def0rc0ffee">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+    </requires>
+    <!-- Script extension first so Kodi treats the add-on as launchable
+         (shows the "Open" button on the info page); the service extension
+         below still autostarts the after-playback rating popup. -->
+    <extension point="xbmc.python.script" library="default.py" name="My ratings">
+        <provides>executable</provides>
+    </extension>
+    <extension point="xbmc.service" library="service.py"/>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="en_GB">Rate media 1-10 after playback and send it to Jellyfin</summary>
+        <description lang="en_GB">After a movie or episode finishes playing, JellyRate pops up 1-10 stars so you can rate what you just watched. The score is written back to your Jellyfin server as a per-user rating, reusing the login already stored by the Jellyfin for Kodi add-on (plugin.video.jellyfin). Open the add-on to browse your recently played items and re-rate any of them. No extra configuration required if Jellyfin for Kodi is signed in.</description>
+        <platform>all</platform>
+        <license>MIT</license>
+        <assets>
+            <icon>resources/icon.png</icon>
+        </assets>
+    </extension>
+</addon>

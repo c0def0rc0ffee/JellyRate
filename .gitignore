@@ -1,0 +1,77 @@
+# Build/output folders (packaging convention)
+/JellyRate Dist/
+/JellyRate Git/
+/JellyRate App/
+
+# Local editor and tooling state (any dot folder except .github)
+.*/
+!.github/
+
+# Local release tooling and notes
+/publish-github.sh
+/release-mirror.conf
+/push-source.sh
+/publish.conf
+/GITHUB-RELEASE-GUIDE.md
+/.publish-allow
+/Github repository
+
+# Archives and temp files
+*.zip
+*.7z
+*.log
+*.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Added 12/09/2026 (Linux packaging sweep)
+# Internal ops docs and local only leftovers, never published
+/PROJECT_NOTES.md
+/.review/
+/build.conf
+/deploy_to_programfiles.ps1
+/deploy_log.txt
+@eaDir/
+
+# Secrets, both cases because matching is case sensitive. Nothing secret
+# lives in this tree; the patterns stop one being added by accident.
+.env
+.env.*
+*credential*
+*CREDENTIAL*
+*Credential*
+*password*
+*PASSWORD*
+*Password*
+*secret*
+*SECRET*
+*Secret*
+*token*
+*TOKEN*
+*Token*
+*cred*
+*CRED*
+*sftp*
+*SFTP*
+*ftp*
+*FTP*
+*.pem
+*.key
+*.pfx
+id_rsa*
+connection.txt
+*config.local*
+*.bak
+
+# Dev only files inside the add-on folder, dropped from both zips by build-zip.sh
+/service.jellyrate/**/test.py
+/service.jellyrate/**/*_test.py
+/service.jellyrate/**/test_*.py

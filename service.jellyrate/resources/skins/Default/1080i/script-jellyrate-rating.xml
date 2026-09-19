@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  <summary>
+  Skin for the after playback rating dialog: title (10), previous rating
+  hint (11), value label (12), ten star buttons (101 to 110) with filled
+  star overlays (301 to 310) and a Cancel button (200). Control ids must
+  match rating_dialog.py.
+  </summary>
+-->
+<window type="dialog">
+    <defaultcontrol always="true">105</defaultcontrol>
+    <zorder>9999</zorder>
+    <coordinates>
+        <system>1</system>
+        <posx>660</posx>
+        <posy>370</posy>
+    </coordinates>
+    <controls>
+        <control type="image">
+            <left>0</left><top>0</top><width>600</width><height>340</height>
+            <texture colordiffuse="F0141821">jellyrate-dim.png</texture>
+        </control>
+        <control type="image">
+            <left>0</left><top>0</top><width>600</width><height>6</height>
+            <texture colordiffuse="FF45B6FE">jellyrate-dim.png</texture>
+        </control>
+
+        <control type="label" id="10">
+            <left>30</left><top>22</top><width>540</width><height>34</height>
+            <font>font13</font><align>center</align><textcolor>FFFFFFFF</textcolor>
+            <label>Rate this</label>
+        </control>
+        <control type="label" id="11">
+            <left>30</left><top>56</top><width>540</width><height>26</height>
+            <font>font12</font><align>center</align><textcolor>FF9AA6B2</textcolor>
+            <label>Not yet rated</label>
+        </control>
+        <control type="label" id="12">
+            <left>30</left><top>88</top><width>540</width><height>60</height>
+            <font>font36</font><align>center</align><textcolor>FF45B6FE</textcolor>
+            <label>5 / 10</label>
+        </control>
+
+        <control type="button" id="101">
+            <left>50</left><top>158</top><width>50</width><height>54</height>
+            <texturefocus colordiffuse="5045B6FE">jellyrate-dim.png</texturefocus>
+            <texturenofocus></texturenofocus>
+            <label></label>
+            <onup>101</onup><ondown>101</ondown><onleft>101</onleft><onright>101</onright>
+        </control>
+        <control type="button" id="102">
+            <left>100</left><top>158</top><width>50</width><height>54</height>
+            <texturefocus colordiffuse="5045B6FE">jellyrate-dim.png</texturefocus>
+            <texturenofocus></texturenofocus>
+            <label></label>
+            <onup>102</onup><ondown>102</ondown><onleft>102</onleft><onright>102</onright>
+        </control>
+        <control type="button" id="103">
+            <left>150</left><top>158</top><width>50</width><height>54</height>
+            <texturefocus colordiffuse="5045B6FE">jellyrate-dim.png</texturefocus>
+            <texturenofocus></texturenofocus>
+            <label></label>
+            <onup>103</onup><ondown>103</ondown><onleft>103</onleft><onright>103</onright>
+        </control>
+        <control type="button" id="104">
+            <left>200</left><top>158</top><width>50</width><height>54</height>
+            <texturefocus colordiffuse="5045B6FE">jellyrate-dim.png</texturefocus>
+            <texturenofocus></texturenofocus>
+            <label></label>
+            <onup>104</onup><ondown>104</ondown><onleft>104</onleft><onright>104</onright>
+        </control>
+        <control type="button" id="105">
+            <left>250</left><top>158</top><width>50</width><height>54</height>
+            <texturefocus colordiffuse="5045B6FE">jellyrate-dim.png</texturefocus>
+            <texturenofocus></texturenofocus>
+            <label></label>
+            <onup>105</onup><ondown>105</ondown><onleft>105</onleft><onright>105</onright>
+        </control>
+        <control type="button" id="106">
+            <left>300</left><top>158</top><width>50</width><height>54</height>
+            <texturefocus colordiffuse="5045B6FE">jellyrate-dim.png</texturefocus>
+            <texturenofocus></texturenofocus>
+            <label></label>
+            <onup>106</onup><ondown>106</ondown><onleft>106</onleft><onright>106</onright>
+        </control>
+        <control type="button" id="107">
+            <left>350</left><top>158</top><width>50</width><height>54</height>
+            <texturefocus colordiffuse="5045B6FE">jellyrate-dim.png</texturefocus>
+            <texturenofocus></texturenofocus>
+            <label></label>
+            <onup>107</onup><ondown>107</ondown><onleft>107</onleft><onright>107</onright>
+        </control>
+        <control type="button" id="108">
+            <left>400</left><top>158</top><width>50</width><height>54</height>
+            <texturefocus colordiffuse="5045B6FE">jellyrate-dim.png</texturefocus>
+            <texturenofocus></texturenofocus>
+            <label></label>
+            <onup>108</onup><ondown>108</ondown><onleft>108</onleft><onright>108</onright>
+        </control>
+        <control type="button" id="109">
+            <left>450</left><top>158</top><width>50</width><height>54</height>
+            <texturefocus colordiffuse="5045B6FE">jellyrate-dim.png</texturefocus>
+            <texturenofocus></texturenofocus>
+            <label></label>
+            <onup>109</onup><ondown>109</ondown><onleft>109</onleft><onright>109</onright>
+        </control>
+        <control type="button" id="110">
+            <left>500</left><top>158</top><width>50</width><height>54</height>
+            <texturefocus colordiffuse="5045B6FE">jellyrate-dim.png</texturefocus>
+            <texturenofocus></texturenofocus>
+            <label></label>
+            <onup>110</onup><ondown>110</ondown><onleft>110</onleft><onright>110</onright>
+        </control>
+        <control type="image" id="201">
+            <left>53</left><top>163</top><width>44</width><height>44</height>
+            <texture>star_empty.png</texture>
+        </control>
+        <control type="image" id="202">
+            <left>103</left><top>163</top><width>44</width><height>44</height>
+            <texture>star_empty.png</texture>
+        </control>
+        <control type="image" id="203">
+            <left>153</left><top>163</top><width>44</width><height>44</height>
+            <texture>star_empty.png</texture>
+        </control>
+        <control type="image" id="204">
+            <left>203</left><top>163</top><width>44</width><height>44</height>
+            <texture>star_empty.png</texture>
+        </control>
+        <control type="image" id="205">
+            <left>253</left><top>163</top><width>44</width><height>44</height>
+            <texture>star_empty.png</texture>
+        </control>
+        <control type="image" id="206">
+            <left>303</left><top>163</top><width>44</width><height>44</height>
+            <texture>star_empty.png</texture>
+        </control>
+        <control type="image" id="207">
+            <left>353</left><top>163</top><width>44</width><height>44</height>
+            <texture>star_empty.png</texture>
+        </control>
+        <control type="image" id="208">
+            <left>403</left><top>163</top><width>44</width><height>44</height>
+            <texture>star_empty.png</texture>
+        </control>
+        <control type="image" id="209">
+            <left>453</left><top>163</top><width>44</width><height>44</height>
+            <texture>star_empty.png</texture>
+        </control>
+        <control type="image" id="210">
+            <left>503</left><top>163</top><width>44</width><height>44</height>
+            <texture>star_empty.png</texture>
+        </control>
+        <control type="image" id="301">
+            <left>53</left><top>163</top><width>44</width><height>44</height>
+            <visible>false</visible>
+            <texture>star_filled.png</texture>
+        </control>
+        <control type="image" id="302">
+            <left>103</left><top>163</top><width>44</width><height>44</height>
+            <visible>false</visible>
+            <texture>star_filled.png</texture>
+        </control>
+        <control type="image" id="303">
+            <left>153</left><top>163</top><width>44</width><height>44</height>
+            <visible>false</visible>
+            <texture>star_filled.png</texture>
+        </control>
+        <control type="image" id="304">
+            <left>203</left><top>163</top><width>44</width><height>44</height>
+            <visible>false</visible>
+            <texture>star_filled.png</texture>
+        </control>
+        <control type="image" id="305">
+            <left>253</left><top>163</top><width>44</width><height>44</height>
+            <visible>false</visible>
+            <texture>star_filled.png</texture>
+        </control>
+        <control type="image" id="306">
+            <left>303</left><top>163</top><width>44</width><height>44</height>
+            <visible>false</visible>
+            <texture>star_filled.png</texture>
+        </control>
+        <control type="image" id="307">
+            <left>353</left><top>163</top><width>44</width><height>44</height>
+            <visible>false</visible>
+            <texture>star_filled.png</texture>
+        </control>
+        <control type="image" id="308">
+            <left>403</left><top>163</top><width>44</width><height>44</height>
+            <visible>false</visible>
+            <texture>star_filled.png</texture>
+        </control>
+        <control type="image" id="309">
+            <left>453</left><top>163</top><width>44</width><height>44</height>
+            <visible>false</visible>
+            <texture>star_filled.png</texture>
+        </control>
+        <control type="image" id="310">
+            <left>503</left><top>163</top><width>44</width><height>44</height>
+            <visible>false</visible>
+            <texture>star_filled.png</texture>
+        </control>
+
+        <control type="button" id="200">
+            <left>200</left><top>262</top><width>200</width><height>52</height>
+            <texturefocus colordiffuse="FFFF5C5C">jellyrate-dim.png</texturefocus>
+            <texturenofocus colordiffuse="33FFFFFF">jellyrate-dim.png</texturenofocus>
+            <font>font13</font><align>center</align><textcolor>FFFFFFFF</textcolor>
+            <label>Cancel</label>
+            <onup>200</onup><ondown>200</ondown><onleft>200</onleft><onright>200</onright>
+        </control>
+    </controls>
+</window>
