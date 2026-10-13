@@ -2,8 +2,9 @@
 <!--
   <summary>
   Add-on settings shown under Configure: the master switch, prompting on
-  an early stop, the watched percentage threshold, the JellyStat hand-off
-  and the default star position. Label ids refer to strings.po.
+  an early stop, the watched percentage threshold, the JellyStat hand-off,
+  the default star position, and the switch for the add-on API the JellyStat
+  dashboard uses (resources/lib/api_server.py). Label ids refer to strings.po.
   </summary>
 -->
 <settings version="1">
@@ -48,6 +49,11 @@
                     <control type="slider" format="integer">
                         <popup>false</popup>
                     </control>
+                </setting>
+                <setting id="api_enabled" type="boolean" label="32007" help="32008">
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle"/>
                 </setting>
             </group>
         </category>

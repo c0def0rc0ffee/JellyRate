@@ -74,6 +74,23 @@ Then restart Kodi.
 | Only prompt after watching at least (%) | 70 | Skip the prompt for brief plays |
 | Also save the score in JellyStat | On | When [JellyStat](https://github.com/c0def0rc0ffee/JellyStat) is installed, the score is recorded in its library mirror too, so the title leaves its rating queue. Best effort: JellyStat missing is normal, and the rating has already reached Jellyfin either way |
 | Default rating shown on the stars | 5 | Where the stars start |
+| Allow JellyStat to manage JellyRate | On | Lets [JellyStat](https://github.com/c0def0rc0ffee/JellyStat)'s web dashboard on the same Kodi change these settings and re-rate recently played titles. JellyRate listens on that Kodi only, never on the network; JellyStat's own password guards the dashboard |
+
+## Managing JellyRate from JellyStat's dashboard
+
+With JellyStat installed and its web dashboard switched on, its **Add-ons**
+page shows JellyRate with two entries:
+
+- **Settings** opens the five settings above as one form, checked against
+  the same limits as the Configure screen.
+- **Recent ratings** lists the 100 most recently played films and episodes
+  with their scores, straight from Jellyfin, like the My Ratings browser.
+  Opening one lets you give it a new score, which goes to Jellyfin and, when
+  that setting is on, to JellyStat as well. A score changed on another
+  device meanwhile is not saved over; reload and try again.
+
+Backup and restore on that page cover the settings. The scores themselves
+live in Jellyfin.
 
 ## Notes and limitations
 

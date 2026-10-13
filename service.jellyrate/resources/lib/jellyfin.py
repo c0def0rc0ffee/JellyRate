@@ -337,3 +337,44 @@ def get_recent_played(creds, limit=100):
             }
         )
     return items
+
+
+def get_item(creds, item_id):
+    """
+    <summary>
+    One item with its user data, in the same shape get_recent_played gives.
+    </summary>
+    <param name="creds">A credentials dict from get_credentials().</param>
+    <param name="item_id">The Jellyfin item id.</param>
+    <returns>The item dict, or None when Jellyfin has no such item for this user.</returns>
+    <exception cref="urllib.error.URLError">An unreachable server; a 404 is
+    answered with None instead, since that is the item not existing.</exception>
+    <remarks>
+    Used by the add-on API to show and re-rate one title, so it asks the server
+    afresh rather than trusting a list fetched earlier: the rating may have been
+    changed on another device since.
+    </remarks>
+    """
+    url = "%s/Users/%s/Items/%s" % (creds["address"], creds["user_id"],
+                                    urllib.parse.quote(item_id, safe=""))
+    try:
+        status, payload = _request(url, creds["token"], method="GET")
+    except urllib.error.HTTPError as exc:
+        if exc.code in (400, 404):
+            return None
+        raise
+    if status != 200 or not payload:
+        return None
+    entry = json.loads(payload.decode("utf-8"))
+    user_data = entry.get("UserData") or {}
+    return {
+        "id": entry.get("Id"),
+        "name": entry.get("Name") or "",
+        "type": entry.get("Type") or "",
+        "series": entry.get("SeriesName") or "",
+        "season": entry.get("ParentIndexNumber"),
+        "episode": entry.get("IndexNumber"),
+        "rating": get_previous_rating(user_data),
+        "last_played": user_data.get("LastPlayedDate") or "",
+        "user_data": user_data,
+    }

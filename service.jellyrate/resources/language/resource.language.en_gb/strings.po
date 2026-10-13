@@ -37,3 +37,11 @@ msgstr ""
 msgctxt "#32006"
 msgid "When the JellyStat add-on is installed, each score is also recorded in its local statistics library. Has no effect when JellyStat is not installed."
 msgstr ""
+
+msgctxt "#32007"
+msgid "Allow JellyStat to manage JellyRate"
+msgstr ""
+
+msgctxt "#32008"
+msgid "Lets the JellyStat add-on's web dashboard on this Kodi change these settings and re-rate recently played titles. JellyRate listens on this Kodi only, never on the network."
+msgstr ""

@@ -11,6 +11,7 @@ already stored by the Jellyfin for Kodi add-on.
 """
 import os
 import sys
+import time
 
 import xbmc
 import xbmcaddon
@@ -32,6 +33,11 @@ from rating_dialog import ask_rating  # noqa: E402
 
 # Media types we are willing to rate (matches Kodi getMediaType / jellyfin.db).
 RATEABLE_TYPES = ("movie", "episode", "musicvideo")
+
+# How long the home screen must have been up before the add-on API announces itself.
+# Home window writes during Kodi's start up are implicated in a crash (the reason
+# Engage waits too), and the announcement is one.
+API_SETTLE_SECONDS = 20
 
 
 def log(message, level=xbmc.LOGINFO):
@@ -239,22 +245,93 @@ def process_item(item):
         notify("Failed to send rating to Jellyfin", error=True)
 
 
+def _sync_api():
+    """
+    <summary>
+    Bring the add-on API in line with its setting (api_server.sync).
+    </summary>
+    <remarks>
+    Imported here so a broken API module can never stop ratings working: any failure
+    is logged and the service carries on.
+    </remarks>
+    """
+    try:
+        import api_server
+        api_server.sync()
+    except Exception as exc:
+        log("Add-on API could not start: %s" % exc, xbmc.LOGERROR)
+
+
+def _stop_api():
+    """
+    <summary>
+    Stop the add-on API if it is running, logging rather than raising on failure.
+    </summary>
+    """
+    try:
+        import api_server
+        api_server.stop()
+    except Exception as exc:
+        log("Add-on API did not stop cleanly: %s" % exc, xbmc.LOGWARNING)
+
+
+class JellyRateMonitor(xbmc.Monitor):
+    """
+    <summary>
+    The service's abort wait, plus the settings callback that switches the add-on API
+    on or off without a restart.
+    </summary>
+    """
+
+    def __init__(self):
+        """
+        <summary>
+        Start with the GUI not yet settled, so a settings change during start up does
+        not bring the API up early.
+        </summary>
+        """
+        super().__init__()
+        self.gui_settled = False
+
+    def onSettingsChanged(self):
+        """
+        <summary>
+        Kodi hook after this add-on's settings are saved, from Configure or the API.
+        </summary>
+        """
+        if self.gui_settled:
+            _sync_api()
+
+
 def main():
     """
     <summary>
     Service loop: record the playback position once a second, rate every finished item in the queue, and stop when Kodi asks to abort.
     </summary>
+    <remarks>
+    The add-on API starts once the home screen has been up for API_SETTLE_SECONDS,
+    and stops however the loop ends.
+    </remarks>
     """
     log("JellyRate service started")
-    monitor = xbmc.Monitor()
+    monitor = JellyRateMonitor()
     player = JellyRatePlayer()
+    home_since = None
 
-    while not monitor.abortRequested():
-        player.track_position()
-        while player.pending:
-            process_item(player.pending.pop(0))
-        if monitor.waitForAbort(1):
-            break
+    try:
+        while not monitor.abortRequested():
+            player.track_position()
+            while player.pending:
+                process_item(player.pending.pop(0))
+            if not monitor.gui_settled and xbmc.getCondVisibility("Window.IsVisible(home)"):
+                home_since = home_since or time.monotonic()
+                if time.monotonic() - home_since >= API_SETTLE_SECONDS:
+                    monitor.gui_settled = True
+                    _sync_api()
+            if monitor.waitForAbort(1):
+                break
+    finally:
+        _stop_api()
 
     log("JellyRate service stopped")
 
