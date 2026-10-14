@@ -34,10 +34,11 @@ import hmac
 import json
 import re
 import secrets
+import socket
 import threading
 import traceback
 import urllib.error
-from datetime import datetime, timezone
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -61,6 +62,20 @@ MAX_BODY = 2 ** 20
 # How many recently played titles the ratings resource lists, the same as the My
 # Ratings screen.
 RECENT_LIMIT = 100
+
+# Seconds allowed for each Jellyfin call made on behalf of the dashboard. JellyStat's
+# proxy gives up after 10 seconds, and a re-rate makes two calls, so both have to
+# finish inside that or the dashboard reports a failure for a write that then lands.
+API_TIMEOUT = 4
+
+# Seconds a request may stall on the socket (a body that never arrives in full) before
+# the handler gives up on it; the handler thread used to block for ever.
+SOCKET_TIMEOUT = 10
+
+# Jellyfin failures the ratings routes turn into 503: the server unreachable or slow
+# (URLError, OSError), an error status or a body that is not JSON (JellyfinError,
+# ValueError).
+_JELLYFIN_FAILURES = (urllib.error.URLError, OSError, ValueError, jellyfin.JellyfinError)
 
 # The settings the API reads and writes, in the Configure screen's order, with the
 # Configure screen's own labels and ranges. api_enabled is deliberately absent: the
@@ -380,22 +395,6 @@ def _creds():
     return creds
 
 
-def _played_text(raw):
-    """
-    <summary>
-    Jellyfin's LastPlayedDate, in UTC, as this box's local date and time in en-GB form.
-    </summary>
-    <param name="raw">An ISO 8601 timestamp such as '2026-10-13T18:30:00.0000000Z', or ''.</param>
-    <returns>'13/10/2026 19:30', or '' when it is missing or unreadable.</returns>
-    """
-    try:
-        when = datetime.strptime((raw or "")[:19], "%Y-%m-%dT%H:%M:%S")
-    except ValueError:
-        return ""
-    local = when.replace(tzinfo=timezone.utc).astimezone()
-    return local.strftime("%d/%m/%Y %H:%M")
-
-
 def _rating_record(item):
     """
     <summary>
@@ -405,8 +404,9 @@ def _rating_record(item):
     <returns>id, title, kind, played and score (read only), and rating, the score as a
     whole number or null when unrated.</returns>
     <remarks>
-    The title is built by the My Ratings screen's own label function, so an episode
-    reads the same on the dashboard as in Kodi.
+    The title is built by the My Ratings screen's own label function and the played
+    date by the shared jellyfin.played_text, so an episode reads the same on the
+    dashboard as in Kodi.
     </remarks>
     """
     from ratings_list import _format_label
@@ -416,7 +416,7 @@ def _rating_record(item):
         "id": item.get("id"),
         "title": _format_label(item),
         "kind": "Episode" if item.get("type") == "Episode" else "Film",
-        "played": _played_text(item.get("last_played")),
+        "played": jellyfin.played_text(item.get("last_played")),
         "score": "Unrated" if score is None else "%d / 10" % score,
         "rating": score,
     }
@@ -444,13 +444,32 @@ def _fetch_item(creds, item_id):
     not answer.</exception>
     """
     try:
-        item = jellyfin.get_item(creds, item_id)
-    except (urllib.error.URLError, OSError, ValueError) as exc:
+        item = jellyfin.get_item(creds, item_id, timeout=API_TIMEOUT)
+    except _JELLYFIN_FAILURES as exc:
         _log("Jellyfin did not answer for %s: %s" % (item_id, exc), xbmc.LOGWARNING)
         raise ApiError(503, "unavailable", "Jellyfin is not answering. Try again shortly.")
     if not item:
         raise ApiError(404, "not_found", "Jellyfin has no such title.")
     return item
+
+
+def _recent_items(creds):
+    """
+    <summary>
+    The recently played titles from Jellyfin, for GET /ratings.
+    </summary>
+    <param name="creds">The Jellyfin login.</param>
+    <returns>The item dicts jellyfin.get_recent_played gives; empty when nothing has
+    been played.</returns>
+    <exception cref="ApiError">503 when Jellyfin is unreachable, refuses or answers
+    with something other than JSON, which the spec's Appendix B requires rather than
+    an empty list the dashboard would show as "nothing played".</exception>
+    """
+    try:
+        return jellyfin.get_recent_played(creds, limit=RECENT_LIMIT, timeout=API_TIMEOUT)
+    except _JELLYFIN_FAILURES as exc:
+        _log("Jellyfin did not answer for the recent list: %s" % exc, xbmc.LOGWARNING)
+        raise ApiError(503, "unavailable", "Jellyfin is not answering. Try again shortly.")
 
 
 def _rerate(item_id, body, if_match):
@@ -466,6 +485,11 @@ def _rerate(item_id, body, if_match):
     The score goes to Jellyfin first; JellyStat gets it too when that setting is on,
     even if the Jellyfin write failed, the same local first rule the service follows
     after playback. Only a failed Jellyfin write is reported as a failure.
+
+    No lock is held here: the ETag is checked against what Jellyfin holds at that
+    moment, which no lock in this process can pin, and holding _write_lock across two
+    network calls used to stall settings writes behind a slow server. The remaining
+    race between the check and the write is the one the spec accepts for v1.
     </remarks>
     """
     if not isinstance(body, dict):
@@ -475,16 +499,15 @@ def _rerate(item_id, body, if_match):
         raise ApiError(422, "validation", "The score must be a whole number from 1 to 10.",
                        "rating")
     creds = _creds()
-    with _write_lock:
-        item = _fetch_item(creds, item_id)
-        _check_match(_rating_etag(item), if_match)
-        try:
-            ok = jellyfin.set_rating(creds, item_id, rating, user_data=item.get("user_data"))
-        except Exception as exc:
-            _log("Error sending rating: %s" % exc, xbmc.LOGERROR)
-            ok = False
-        if _addon().getSettingBool("save_to_jellystat"):
-            jellystat_bridge.save(item_id, rating)
+    item = _fetch_item(creds, item_id)
+    _check_match(_rating_etag(item), if_match)
+    try:
+        ok = jellyfin.set_rating(creds, item_id, rating, timeout=API_TIMEOUT)
+    except Exception as exc:
+        _log("Error sending rating: %s" % exc, xbmc.LOGERROR)
+        ok = False
+    if _addon().getSettingBool("save_to_jellystat"):
+        jellystat_bridge.save(item_id, rating)
     if not ok:
         raise ApiError(503, "unavailable", "Jellyfin did not take the score. Try again shortly.")
     item["rating"] = float(rating)
@@ -586,7 +609,7 @@ def handle(method, path, query, body, if_match):
         return 200, _settings_record(values), {"ETag": etag_of(values)}
     if path == "/ratings":
         _allow(method, ["GET"])
-        items = jellyfin.get_recent_played(_creds(), limit=RECENT_LIMIT)
+        items = _recent_items(_creds())
         return 200, {"items": [_rating_record(i) for i in items if i.get("id")]}, {}
     match = _RATING_PATH.match(path)
     if match:
@@ -625,12 +648,14 @@ class _Handler(BaseHTTPRequestHandler):
     </summary>
     <remarks>
     Responses are HTTP/1.0, one request per connection, so a refused request never
-    leaves an unread body in a kept alive connection.
+    leaves an unread body in a kept alive connection. The socket timeout bounds a
+    body that stops arriving; without it a short body held the thread for ever.
     </remarks>
     """
 
     server_version = "JellyRateApi"
     sys_version = ""
+    timeout = SOCKET_TIMEOUT
 
     def log_message(self, fmt, *args):
         """
@@ -701,16 +726,26 @@ class _Handler(BaseHTTPRequestHandler):
         </summary>
         <returns>The parsed value.</returns>
         <exception cref="ApiError">413 when Content-Length is over MAX_BODY, 400 when it
-        is missing, not a number, or the body is not JSON.</exception>
+        is missing, not a number, negative, or the body is not JSON.</exception>
+        <remarks>
+        A negative length is refused outright: rfile.read of a negative count reads
+        until the client closes, which held the thread for ever.
+        </remarks>
         """
         try:
             length = int(self.headers.get("Content-Length") or "")
         except ValueError:
             raise ApiError(400, "bad_request", "The request needs a Content-Length.")
+        if length < 0:
+            raise ApiError(400, "bad_request", "The Content-Length cannot be negative.")
         if length > MAX_BODY:
             raise ApiError(413, "too_large", "The request is larger than %d bytes." % MAX_BODY)
         try:
-            return json.loads(self.rfile.read(length).decode("utf-8"))
+            raw = self.rfile.read(length)
+        except socket.timeout:
+            raise ApiError(400, "bad_request", "The request body did not arrive in full.")
+        try:
+            return json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
             raise ApiError(400, "bad_request", "The request body is not JSON.")
 

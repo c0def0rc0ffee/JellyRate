@@ -69,13 +69,16 @@ def _format_rating(rating):
 def _format_date(raw):
     """
     <summary>
-    Jellyfin LastPlayedDate (ISO 8601, UTC) -> 'YYYY-MM-DD HH:MM'.
+    Jellyfin's LastPlayedDate as the row's date text: local time, en-GB, 'DD/MM/YYYY HH:MM'.
     </summary>
+    <param name="raw">The ISO 8601 UTC stamp from Jellyfin, or ''.</param>
+    <returns>The text, or '' when there is no usable stamp.</returns>
+    <remarks>
+    Delegates to jellyfin.played_text, the same function the add-on API uses, so the
+    Kodi screen and the dashboard agree. It used to show the raw UTC stamp as ISO text.
+    </remarks>
     """
-    if not raw:
-        return ""
-    cleaned = raw.replace("T", " ")
-    return cleaned[:16]
+    return jellyfin.played_text(raw)
 
 
 class _RatingsListWindow(xbmcgui.WindowXMLDialog):
@@ -154,9 +157,7 @@ class _RatingsListWindow(xbmcgui.WindowXMLDialog):
             return
 
         try:
-            ok = jellyfin.set_rating(
-                self.creds, item["id"], new_rating, user_data=item.get("user_data")
-            )
+            ok = jellyfin.set_rating(self.creds, item["id"], new_rating)
         except Exception as exc:
             xbmc.log("[service.jellyrate] re-rate failed: %s" % exc, xbmc.LOGERROR)
             ok = False
@@ -215,14 +216,16 @@ def show_ratings_list():
     Entry point for the My Ratings browser: fetch the stored credentials and the 100 most recently played items behind a busy dialog, then show the list window.
     </summary>
     <remarks>
-    With no credentials or no played items an OK dialog says why and nothing else opens.
+    With no credentials, no answer from Jellyfin or no played items an OK dialog says
+    which, and nothing else opens. Line breaks in those dialogs are [CR], the form
+    Kodi's text layout honours.
     </remarks>
     """
     creds = jellyfin.get_credentials()
     if not creds:
         xbmcgui.Dialog().ok(
             ADDON_NAME,
-            "Jellyfin login not found.\n"
+            "Jellyfin login not found.[CR]"
             "Sign in with Jellyfin for Kodi (plugin.video.jellyfin) first.",
         )
         return
@@ -230,8 +233,18 @@ def show_ratings_list():
     xbmc.executebuiltin("ActivateWindow(busydialognocancel)")
     try:
         items = jellyfin.get_recent_played(creds, 100)
+    except Exception as exc:
+        xbmc.log("[service.jellyrate] recent list failed: %s" % exc, xbmc.LOGWARNING)
+        items = None
     finally:
         xbmc.executebuiltin("Dialog.Close(busydialognocancel)")
+
+    if items is None:
+        xbmcgui.Dialog().ok(
+            ADDON_NAME,
+            "Jellyfin is not answering.[CR]Try again shortly.",
+        )
+        return
 
     if not items:
         xbmcgui.Dialog().ok(

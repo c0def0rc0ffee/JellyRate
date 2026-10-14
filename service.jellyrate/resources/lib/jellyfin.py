@@ -15,12 +15,26 @@ import sqlite3
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 
 import xbmc
 import xbmcvfs
 
 JELLYFIN_ADDON_DATA = "special://profile/addon_data/plugin.video.jellyfin/"
 LOG_PREFIX = "[service.jellyrate.jellyfin] "
+
+# How long one Jellyfin call may take on the service and My Ratings paths. The
+# add-on API passes its own, shorter figure (api_server.API_TIMEOUT).
+DEFAULT_TIMEOUT = 15
+
+
+class JellyfinError(Exception):
+    """
+    <summary>
+    Jellyfin answered, but not usefully: a status other than 200 or a body that
+    is not JSON. Network failures stay as urllib.error.URLError or OSError.
+    </summary>
+    """
 
 
 def _log(message, level=xbmc.LOGINFO):
@@ -53,6 +67,11 @@ def get_credentials():
     <summary>
     Return {'address', 'user_id', 'token'} or None if not signed in.
     </summary>
+    <remarks>
+    With more than one server in data.json the one Jellyfin for Kodi used most
+    recently is taken, by its DateLastAccessed stamp, which is how that add-on
+    itself picks the server to connect to. A server without the stamp sorts last.
+    </remarks>
     """
     path = _translate(JELLYFIN_ADDON_DATA + "data.json")
     if not xbmcvfs.exists(path):
@@ -71,11 +90,13 @@ def get_credentials():
         _log("Could not parse data.json: %s" % exc, xbmc.LOGERROR)
         return None
 
-    servers = data.get("Servers") or []
+    servers = [s for s in (data.get("Servers") or []) if isinstance(s, dict)]
     if not servers:
         return None
 
-    server = servers[0]
+    # ISO 8601 stamps in one format sort correctly as text; newest first.
+    server = sorted(servers, key=lambda s: str(s.get("DateLastAccessed") or ""),
+                    reverse=True)[0]
     address = (
         server.get("address")
         or server.get("ManualAddress")
@@ -172,15 +193,16 @@ def get_jellyfin_id(kodi_id, media_type):
 # --------------------------------------------------------------------------- #
 # Write the rating to Jellyfin
 # --------------------------------------------------------------------------- #
-def _request(url, token, method="GET", body=None):
+def _request(url, token, method="GET", body=None, timeout=DEFAULT_TIMEOUT):
     """
     <summary>
-    One authenticated HTTP call to Jellyfin with a 15 second timeout.
+    One authenticated HTTP call to Jellyfin.
     </summary>
     <param name="url">Full URL.</param>
     <param name="token">Access token, sent as X-Emby-Token.</param>
     <param name="method">HTTP method, GET by default.</param>
     <param name="body">A JSON serialisable body, or None for no body.</param>
+    <param name="timeout">Seconds to wait for the connection and the response.</param>
     <returns>A tuple of the HTTP status and the raw response bytes.</returns>
     <exception cref="urllib.error.URLError">An error status or an unreachable server; nothing is caught here, callers decide.</exception>
     """
@@ -194,10 +216,21 @@ def _request(url, token, method="GET", body=None):
         headers["Content-Type"] = "application/json"
 
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        status = getattr(resp, "status", resp.getcode())
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        status = resp.status if hasattr(resp, "status") else resp.getcode()
         payload = resp.read()
         return status, payload
+
+
+def _quote(value):
+    """
+    <summary>
+    A user or item id made safe for a URL path segment.
+    </summary>
+    <param name="value">The id; anything that is not a string is stringified first.</param>
+    <returns>The percent encoded text, with no character left as a separator.</returns>
+    """
+    return urllib.parse.quote(str(value), safe="")
 
 
 def _user_data_url(creds, item_id):
@@ -207,24 +240,32 @@ def _user_data_url(creds, item_id):
     </summary>
     <param name="creds">A credentials dict from get_credentials().</param>
     <param name="item_id">The Jellyfin item id.</param>
-    <returns>The URL.</returns>
+    <returns>The URL, with both ids percent encoded.</returns>
     """
     return "%s/Users/%s/Items/%s/UserData" % (
         creds["address"],
-        creds["user_id"],
-        item_id,
+        _quote(creds["user_id"]),
+        _quote(item_id),
     )
 
 
-def get_user_data(creds, item_id):
+def get_user_data(creds, item_id, timeout=DEFAULT_TIMEOUT):
     """
     <summary>
     Return the current Jellyfin UserData dto for an item (or {} on failure).
     </summary>
+    <param name="creds">A credentials dict from get_credentials().</param>
+    <param name="item_id">The Jellyfin item id.</param>
+    <param name="timeout">Seconds allowed for the call.</param>
+    <remarks>
+    Read only: this feeds the "previously rated" hint. Nothing in it is ever
+    posted back, see set_rating.
+    </remarks>
     """
     try:
         status, payload = _request(
-            _user_data_url(creds, item_id), creds["token"], method="GET"
+            _user_data_url(creds, item_id), creds["token"], method="GET",
+            timeout=timeout,
         )
         if status == 200 and payload:
             return json.loads(payload.decode("utf-8")) or {}
@@ -253,22 +294,28 @@ def get_previous_rating(user_data):
         return None
 
 
-def set_rating(creds, item_id, rating, user_data=None):
+def set_rating(creds, item_id, rating, timeout=DEFAULT_TIMEOUT):
     """
     <summary>
-    Write a per-user numeric rating (1-10) to Jellyfin UserData.
+    Write a per user numeric rating (1 to 10) to Jellyfin UserData.
     </summary>
+    <param name="creds">A credentials dict from get_credentials().</param>
+    <param name="item_id">The Jellyfin item id.</param>
+    <param name="rating">The score; sent as a float.</param>
+    <param name="timeout">Seconds allowed for the call.</param>
+    <returns>True when Jellyfin answered 200 or 204.</returns>
+    <exception cref="urllib.error.URLError">An error status or an unreachable server.</exception>
     <remarks>
-    Posts the existing UserData back with Rating updated so that other fields
-    (played state, playback position, etc.) are preserved. Pass ``user_data``
-    if you already fetched it to avoid a second request.
+    The body is {"Rating": value} and nothing else. Jellyfin applies every field
+    present in an UpdateUserItemDataDto and leaves the rest alone, so posting a
+    dto fetched earlier would rewind Played, PlayCount, PlaybackPositionTicks and
+    LastPlayedDate to whatever they were when it was fetched, which an earlier
+    version of this function did.
     </remarks>
     """
-    dto = dict(user_data) if user_data else get_user_data(creds, item_id)
-    dto["Rating"] = float(rating)
-
     status, _ = _request(
-        _user_data_url(creds, item_id), creds["token"], method="POST", body=dto
+        _user_data_url(creds, item_id), creds["token"], method="POST",
+        body={"Rating": float(rating)}, timeout=timeout,
     )
     success = status in (200, 204)
     if not success:
@@ -279,15 +326,23 @@ def set_rating(creds, item_id, rating, user_data=None):
 # --------------------------------------------------------------------------- #
 # Recently played items (for the "My Ratings" browser)
 # --------------------------------------------------------------------------- #
-def get_recent_played(creds, limit=100):
+def get_recent_played(creds, limit=100, timeout=DEFAULT_TIMEOUT):
     """
     <summary>
     Return recently played movies/episodes, newest first.
     </summary>
+    <param name="creds">A credentials dict from get_credentials().</param>
+    <param name="limit">How many items to ask for.</param>
+    <param name="timeout">Seconds allowed for the call.</param>
+    <returns>A list of item dicts, possibly empty when nothing has been played.</returns>
+    <exception cref="urllib.error.URLError">An unreachable server or an HTTP error status.</exception>
+    <exception cref="JellyfinError">A status other than 200, or a body that is not JSON.</exception>
     <remarks>
     Each entry: {id, name, type, series, season, episode, rating,
     last_played, user_data}. Pulled straight from Jellyfin so it always
-    reflects the server (including items rated on other devices).
+    reflects the server (including items rated on other devices). Failures
+    raise rather than returning an empty list, so a caller can tell "nothing
+    played" from "Jellyfin is not answering"; the add-on API turns them into 503.
     </remarks>
     """
     query = urllib.parse.urlencode(
@@ -302,23 +357,23 @@ def get_recent_played(creds, limit=100):
             "Limit": int(limit),
         }
     )
-    url = "%s/Users/%s/Items?%s" % (creds["address"], creds["user_id"], query)
+    url = "%s/Users/%s/Items?%s" % (creds["address"], _quote(creds["user_id"]), query)
 
     try:
-        status, payload = _request(url, creds["token"], method="GET")
+        status, payload = _request(url, creds["token"], method="GET", timeout=timeout)
     except Exception as exc:
         _log("get_recent_played request failed: %s" % exc, xbmc.LOGERROR)
-        return []
+        raise
 
     if status != 200 or not payload:
         _log("get_recent_played returned HTTP %s" % status, xbmc.LOGWARNING)
-        return []
+        raise JellyfinError("Jellyfin answered HTTP %s" % status)
 
     try:
         data = json.loads(payload.decode("utf-8"))
     except ValueError as exc:
         _log("get_recent_played parse error: %s" % exc, xbmc.LOGERROR)
-        return []
+        raise JellyfinError("Jellyfin's answer was not JSON")
 
     items = []
     for entry in data.get("Items", []):
@@ -339,13 +394,14 @@ def get_recent_played(creds, limit=100):
     return items
 
 
-def get_item(creds, item_id):
+def get_item(creds, item_id, timeout=DEFAULT_TIMEOUT):
     """
     <summary>
     One item with its user data, in the same shape get_recent_played gives.
     </summary>
     <param name="creds">A credentials dict from get_credentials().</param>
     <param name="item_id">The Jellyfin item id.</param>
+    <param name="timeout">Seconds allowed for the call.</param>
     <returns>The item dict, or None when Jellyfin has no such item for this user.</returns>
     <exception cref="urllib.error.URLError">An unreachable server; a 404 is
     answered with None instead, since that is the item not existing.</exception>
@@ -355,10 +411,10 @@ def get_item(creds, item_id):
     changed on another device since.
     </remarks>
     """
-    url = "%s/Users/%s/Items/%s" % (creds["address"], creds["user_id"],
-                                    urllib.parse.quote(item_id, safe=""))
+    url = "%s/Users/%s/Items/%s" % (creds["address"], _quote(creds["user_id"]),
+                                    _quote(item_id))
     try:
-        status, payload = _request(url, creds["token"], method="GET")
+        status, payload = _request(url, creds["token"], method="GET", timeout=timeout)
     except urllib.error.HTTPError as exc:
         if exc.code in (400, 404):
             return None
@@ -378,3 +434,26 @@ def get_item(creds, item_id):
         "last_played": user_data.get("LastPlayedDate") or "",
         "user_data": user_data,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Shared formatting
+# --------------------------------------------------------------------------- #
+def played_text(raw):
+    """
+    <summary>
+    Jellyfin's LastPlayedDate, in UTC, as this box's local date and time in en-GB form.
+    </summary>
+    <param name="raw">An ISO 8601 timestamp such as '2026-10-13T18:30:00.0000000Z', or ''.</param>
+    <returns>'13/10/2026 19:30', or '' when it is missing or unreadable.</returns>
+    <remarks>
+    Used by the My Ratings screen and the add-on API alike, so the two show the
+    same text for the same play.
+    </remarks>
+    """
+    try:
+        when = datetime.strptime((raw or "")[:19], "%Y-%m-%dT%H:%M:%S")
+    except (ValueError, TypeError):
+        return ""
+    local = when.replace(tzinfo=timezone.utc).astimezone()
+    return local.strftime("%d/%m/%Y %H:%M")

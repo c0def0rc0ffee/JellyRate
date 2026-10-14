@@ -103,6 +103,11 @@ live in Jellyfin.
 - Only library items that came from Jellyfin can be rated. Local-only items
   have no Jellyfin id and are silently skipped.
 - Movies, episodes and music videos are supported.
+- With more than one server signed in through Jellyfin for Kodi, the one that
+  add-on used most recently is the one rated against, the same choice it makes
+  itself when it connects.
+- The prompt waits until nothing is playing. With a playlist or autoplay, the
+  stars for each episode appear once you stop or the run ends, in order.
 
 ## Licence
 

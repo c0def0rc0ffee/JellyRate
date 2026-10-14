@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # <summary>
-# Packaging build for the JellyRate Kodi add-on (service.jellyrate). Builds two
+# Build script for the JellyRate Kodi add-on (service.jellyrate). Builds two
 # versioned zips straight from the project root, plus the local run copy:
 #   JellyRate Dist/service.jellyrate-<version>.zip  Kodi installable add-on zip.
 #       Kodi's "Install from zip file" needs the add-on folder at the zip
@@ -269,9 +269,12 @@ echo "Built: $git_zip ($(zip_size_kb "$git_zip") KB)"
 
 # 7) Post build verification. Do not trust the staging: read the archives
 #    back and refuse to keep a zip that carries a local only file, a secret
-#    looking name, version control or a backslash entry.
+#    looking name, version control, a backslash entry, or anything matching
+#    the patterns read from .git/info/exclude. Those patterns are matched
+#    here as globs against every entry's base name and are never spelled
+#    out in this script, which ships in the source zip.
 verify_zip() {
-    local archive="$1" listing
+    local archive="$1" listing entry base pat clean
     unzip -tq "$archive" >/dev/null || die "$archive fails unzip -t"
     listing="$(unzip -Z1 "$archive")"
     if grep -q '\\' <<< "$listing"; then
@@ -280,9 +283,20 @@ verify_zip() {
     if grep -Ei 'cred|secret|passw|token|htaccess|(^|/)\.env|(^|/)\.git/|node_modules|__pycache__|\.pyc$' <<< "$listing"; then
         die "$archive carries something that must never ship (listed above)"
     fi
-    if grep -E '^(publish-github\.sh|push-source\.sh|publish\.conf|\.publish-allow|Github repository|GITHUB-RELEASE-GUIDE\.md|build\.conf|release-mirror\.conf|PROJECT_NOTES\.md|Packaging\.md|deploy_to_programfiles\.ps1|deploy_log\.txt)$' <<< "$listing"; then
+    if grep -E '^(publish-github\.sh|push-source\.sh|publish\.conf|\.publish-allow|Github repository|GITHUB-RELEASE-GUIDE\.md|build\.conf|release-mirror\.conf|PROJECT_NOTES\.md|deploy_to_programfiles\.ps1|deploy_log\.txt)$' <<< "$listing"; then
         die "$archive carries a local only file (listed above)"
     fi
+    while IFS= read -r entry; do
+        [[ -z "$entry" ]] && continue
+        base="${entry%/}"; base="${base##*/}"
+        for pat in "${local_patterns[@]}"; do
+            clean="${pat%/}"; clean="${clean#/}"
+            # shellcheck disable=SC2254
+            case "$base" in
+                $clean) die "$archive carries a locally excluded entry ($entry): refusing to keep it" ;;
+            esac
+        done
+    done <<< "$listing"
     grep -q "^$addon_id/addon.xml$" <<< "$listing" || die "$archive has no $addon_id/addon.xml"
 }
 verify_zip "$dist_zip"

@@ -21,6 +21,7 @@ import http.client
 import json
 import os
 import sys
+import time
 import types
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -114,12 +115,12 @@ LIBRARY = {
               "season": 1, "episode": 1, "rating": None, "last_played": "",
               "user_data": {"Played": True}},
 }
-STATE = {"creds": CREDS, "down": False, "refuse": False}
+STATE = {"creds": CREDS, "down": False, "refuse": False, "list_error": None}
 SET_CALLS = []
 BRIDGE_CALLS = []
 
 
-def fake_get_item(creds, item_id):
+def fake_get_item(creds, item_id, timeout=None):
     """<summary>One item from LIBRARY, a copy so the API cannot change the fake by accident.</summary>"""
     if STATE["down"]:
         raise OSError("connection refused")
@@ -127,17 +128,24 @@ def fake_get_item(creds, item_id):
     return json.loads(json.dumps(item)) if item else None
 
 
-def fake_set_rating(creds, item_id, rating, user_data=None):
-    """<summary>Record the write and store it, unless the fake server is refusing.</summary>"""
-    SET_CALLS.append((item_id, rating, user_data))
+def fake_set_rating(creds, item_id, rating, timeout=None):
+    """<summary>Record the write, with the timeout it was given, and store it unless the fake server is refusing.</summary>"""
+    SET_CALLS.append((item_id, rating, timeout))
     if STATE["refuse"]:
         return False
     LIBRARY[item_id]["rating"] = float(rating)
     return True
 
 
+def fake_get_recent_played(creds, limit=100, timeout=None):
+    """<summary>Every LIBRARY item as a copy, or whatever failure STATE['list_error'] holds, raised.</summary>"""
+    if STATE["list_error"] is not None:
+        raise STATE["list_error"]
+    return [json.loads(json.dumps(i)) for i in LIBRARY.values()]
+
+
 jellyfin.get_credentials = lambda: STATE["creds"]
-jellyfin.get_recent_played = lambda creds, limit=100: [json.loads(json.dumps(i)) for i in LIBRARY.values()]
+jellyfin.get_recent_played = fake_get_recent_played
 jellyfin.get_item = fake_get_item
 jellyfin.set_rating = fake_set_rating
 jellystat_bridge.save = lambda item_id, score: BRIDGE_CALLS.append((item_id, score)) or True
@@ -261,7 +269,8 @@ def test_ratings():
     status, record, headers = call("PUT", "/ratings/" + FILM, {"rating": 9, "title": "x"}, etag)
     equal((status, record["rating"], record["score"]), (200, 9, "9 / 10"), "re-rated")
     equal(SET_CALLS[-1][:2], (FILM, 9), "written to Jellyfin")
-    equal(SET_CALLS[-1][2], {"Rating": 7.0, "Played": True}, "existing user data passed back")
+    equal(SET_CALLS[-1][2], api_server.API_TIMEOUT, "the dashboard's shorter timeout is used")
+    check(2 * api_server.API_TIMEOUT < 10, "two Jellyfin calls fit inside JellyStat's 10 second proxy limit")
     equal(BRIDGE_CALLS, [(FILM, 9)], "handed to JellyStat")
     equal(api_error("PUT", "/ratings/" + FILM, {"rating": 3}, etag)[:2], (412, "stale"),
           "a re-rate against the old score is refused")
@@ -286,6 +295,12 @@ def test_ratings():
     STATE["creds"] = None
     equal(api_error("GET", "/ratings")[:2], (503, "unavailable"), "no Jellyfin login")
     STATE["creds"] = CREDS
+    for failure in (OSError("connection refused"), jellyfin.JellyfinError("HTTP 500"),
+                    ValueError("not JSON")):
+        STATE["list_error"] = failure
+        equal(api_error("GET", "/ratings")[:2], (503, "unavailable"),
+              "the list answers 503, not an empty list, on %r" % failure)
+    STATE["list_error"] = None
 
 
 def test_backup_restore():
@@ -351,6 +366,20 @@ def test_server():
         status, body = request(port, "PUT", "/settings/1", token, body={},
                                headers={"Content-Length": str(api_server.MAX_BODY + 1)})
         equal((status, body["error"]["code"]), (413, "too_large"), "oversized body")
+        status, body = request(port, "PUT", "/settings/1", token, body={},
+                               headers={"Content-Length": "-1"})
+        equal((status, body["error"]["code"]), (400, "bad_request"),
+              "a negative Content-Length is refused instead of blocking the thread")
+        api_server._Handler.timeout = 1
+        try:
+            started = time.monotonic()
+            status, body = request(port, "PUT", "/settings/1", token, body={},
+                                   headers={"Content-Length": "40"})
+            equal((status, body["error"]["code"]), (400, "bad_request"),
+                  "a body shorter than its Content-Length is given up on")
+            check(time.monotonic() - started < 5, "and given up on within the socket timeout")
+        finally:
+            api_server._Handler.timeout = api_server.SOCKET_TIMEOUT
     finally:
         SETTINGS["api_enabled"] = False
         api_server.sync()

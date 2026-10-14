@@ -39,6 +39,16 @@ RATEABLE_TYPES = ("movie", "episode", "musicvideo")
 # Engage waits too), and the announcement is one.
 API_SETTLE_SECONDS = 20
 
+# How long to wait for the home screen to show at all before the settle period starts
+# anyway: a start up window other than Home, or a video started at login, must not
+# keep the API off for good.
+HOME_BACKSTOP_SECONDS = 60
+
+# How long after an item finished (and nothing else is playing) before its prompt is
+# shown. Kodi starts the next playlist item a moment after the previous one ends, and
+# the dialog must not open in that gap only to have the next episode start under it.
+PLAYBACK_GRACE_SECONDS = 2
+
 
 def log(message, level=xbmc.LOGINFO):
     """
@@ -105,9 +115,11 @@ class JellyRatePlayer(xbmc.Player):
         </summary>
         <remarks>
         A failed info tag read is logged as a warning and the tracked item cleared, so nothing is queued for it later.
+        Audio starting clears it too: otherwise a video that errored stayed tracked and was queued when the song ended.
         </remarks>
         """
         if not self.isPlayingVideo():
+            self._reset_current()
             return
         try:
             tag = self.getVideoInfoTag()
@@ -132,13 +144,20 @@ class JellyRatePlayer(xbmc.Player):
                 pass
 
     def onPlayBackEnded(self):
-        # Played to the natural end -> treat as 100% watched.
         """
         <summary>
         Kodi hook: playback reached its natural end, so queue the item as fully watched.
         </summary>
         """
         self._enqueue(100.0)
+
+    def onPlayBackError(self):
+        """
+        <summary>
+        Kodi hook: playback failed, so forget the item; nothing that did not play is rated.
+        </summary>
+        """
+        self._reset_current()
 
     def onPlayBackStopped(self):
         """
@@ -163,6 +182,7 @@ class JellyRatePlayer(xbmc.Player):
         <param name="percent">How much of it was watched, 0 to 100.</param>
         <remarks>
         Only items with a positive Kodi id and a media type in RATEABLE_TYPES are queued; anything else is dropped without comment.
+        The queue entry records when it was queued (time.monotonic) so take_due can apply the grace period.
         </remarks>
         """
         if (
@@ -176,9 +196,35 @@ class JellyRatePlayer(xbmc.Player):
                     "media_type": self.media_type,
                     "title": self.title,
                     "percent": percent,
+                    "queued_at": time.monotonic(),
                 }
             )
         self._reset_current()
+
+    def take_due(self, now=None):
+        """
+        <summary>
+        Remove and return the queued items whose prompt may be shown now.
+        </summary>
+        <param name="now">The clock reading to judge by, time.monotonic() by default; tests pass their own.</param>
+        <returns>The due items in the order they finished, or an empty list.</returns>
+        <remarks>
+        Nothing is due while a video is playing: the prompt would open over the next
+        episode, and the service loop blocked inside it would stop tracking that
+        episode's position, so stopping it early used to be read as 0 percent. Nothing
+        is due within PLAYBACK_GRACE_SECONDS of being queued either, so the gap before
+        Kodi starts the next playlist item does not count as "nothing playing". Items
+        are taken all together, so a batch is shown one after the other.
+        </remarks>
+        """
+        if not self.pending or self.isPlayingVideo():
+            return []
+        if now is None:
+            now = time.monotonic()
+        if any(now - item["queued_at"] < PLAYBACK_GRACE_SECONDS for item in self.pending):
+            return []
+        due, self.pending = self.pending, []
+        return due
 
 
 def process_item(item):
@@ -213,8 +259,8 @@ def process_item(item):
         )
         return
 
-    # Fetch existing UserData so we can show the previous rating and reuse the
-    # dto when writing back (avoids a second round-trip).
+    # Fetch the existing UserData only for the "previously rated" hint. It is never
+    # posted back: the write sends the score alone (see jellyfin.set_rating).
     user_data = jellyfin.get_user_data(creds, jellyfin_id)
     previous = jellyfin.get_previous_rating(user_data)
 
@@ -228,7 +274,7 @@ def process_item(item):
         return  # user cancelled
 
     try:
-        ok = jellyfin.set_rating(creds, jellyfin_id, rating, user_data=user_data)
+        ok = jellyfin.set_rating(creds, jellyfin_id, rating)
     except Exception as exc:
         log("Error sending rating: %s" % exc, xbmc.LOGERROR)
         ok = False
@@ -275,6 +321,55 @@ def _stop_api():
         log("Add-on API did not stop cleanly: %s" % exc, xbmc.LOGWARNING)
 
 
+class ApiStartGate:
+    """
+    <summary>
+    Decides when the add-on API may first announce itself, without blocking the
+    service loop that also tracks playback.
+    </summary>
+    <remarks>
+    The shape is Engage's _wait_for_gui: wait for the home screen to show, with
+    HOME_BACKSTOP_SECONDS as a backstop, then rest API_SETTLE_SECONDS, then start
+    whatever window is visible at that moment. The earlier gate needed Home to be
+    visible on the very tick the rest ended, so a start up window other than Home, or
+    a video started straight after login, kept the API off until the user happened to
+    sit on Home.
+    </remarks>
+    """
+
+    def __init__(self, started_at):
+        """
+        <summary>
+        Start the backstop clock.
+        </summary>
+        <param name="started_at">The time.monotonic() reading when the service started.</param>
+        """
+        self.started_at = started_at
+        self.home_seen_at = None
+        self.opened = False
+
+    def due(self, now, home_visible):
+        """
+        <summary>
+        Report, once, that the settle period has ended.
+        </summary>
+        <param name="now">The current time.monotonic() reading.</param>
+        <param name="home_visible">Whether Kodi says the home window is visible right now.</param>
+        <returns>True on the single call where the API may start; False before and after.</returns>
+        """
+        if self.opened:
+            return False
+        if self.home_seen_at is None:
+            if home_visible or now - self.started_at >= HOME_BACKSTOP_SECONDS:
+                self.home_seen_at = now
+            else:
+                return False
+        if now - self.home_seen_at >= API_SETTLE_SECONDS:
+            self.opened = True
+            return True
+        return False
+
+
 class JellyRateMonitor(xbmc.Monitor):
     """
     <summary>
@@ -306,28 +401,28 @@ class JellyRateMonitor(xbmc.Monitor):
 def main():
     """
     <summary>
-    Service loop: record the playback position once a second, rate every finished item in the queue, and stop when Kodi asks to abort.
+    Service loop: record the playback position once a second, rate every finished item once nothing is playing, and stop when Kodi asks to abort.
     </summary>
     <remarks>
-    The add-on API starts once the home screen has been up for API_SETTLE_SECONDS,
-    and stops however the loop ends.
+    Prompts wait until playback has stopped (JellyRatePlayer.take_due), so the dialog
+    never opens over the next episode. The add-on API starts when ApiStartGate says
+    so, and stops however the loop ends.
     </remarks>
     """
     log("JellyRate service started")
     monitor = JellyRateMonitor()
     player = JellyRatePlayer()
-    home_since = None
+    gate = ApiStartGate(time.monotonic())
 
     try:
         while not monitor.abortRequested():
             player.track_position()
-            while player.pending:
-                process_item(player.pending.pop(0))
-            if not monitor.gui_settled and xbmc.getCondVisibility("Window.IsVisible(home)"):
-                home_since = home_since or time.monotonic()
-                if time.monotonic() - home_since >= API_SETTLE_SECONDS:
-                    monitor.gui_settled = True
-                    _sync_api()
+            for item in player.take_due():
+                process_item(item)
+            if not monitor.gui_settled and gate.due(
+                    time.monotonic(), xbmc.getCondVisibility("Window.IsVisible(home)")):
+                monitor.gui_settled = True
+                _sync_api()
             if monitor.waitForAbort(1):
                 break
     finally:
