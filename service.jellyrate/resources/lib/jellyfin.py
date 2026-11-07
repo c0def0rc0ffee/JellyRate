@@ -199,15 +199,20 @@ def _request(url, token, method="GET", body=None, timeout=DEFAULT_TIMEOUT):
     One authenticated HTTP call to Jellyfin.
     </summary>
     <param name="url">Full URL.</param>
-    <param name="token">Access token, sent as X-Emby-Token.</param>
+    <param name="token">Access token, sent in the Authorization header.</param>
     <param name="method">HTTP method, GET by default.</param>
     <param name="body">A JSON serialisable body, or None for no body.</param>
     <param name="timeout">Seconds to wait for the connection and the response.</param>
     <returns>A tuple of the HTTP status and the raw response bytes.</returns>
     <exception cref="urllib.error.URLError">An error status or an unreachable server; nothing is caught here, callers decide.</exception>
+    <remarks>
+    Jellyfin 12 answers 401 to the old X-Emby-Token header. The value carries the
+    token alone on purpose: device fields sent with a token can overwrite how
+    Jellyfin for Kodi's own device is recorded on the server.
+    </remarks>
     """
     headers = {
-        "X-Emby-Token": token,
+        "Authorization": 'MediaBrowser Token="%s"' % token,
         "Accept": "application/json",
     }
     data = None

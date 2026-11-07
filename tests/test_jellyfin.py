@@ -156,7 +156,7 @@ def test_set_rating_body():
     equal(sent["method"], "POST", "method")
     equal(sent["path"], "/Users/user%20one/Items/abc/UserData", "user id quoted in the path")
     equal(sent["body"], {"Rating": 8.0}, "the body is the score alone, so Played and the resume point are untouched")
-    equal(sent["headers"].get("x-emby-token"), "tok", "token header")
+    equal(sent["headers"].get("authorization"), 'MediaBrowser Token="tok"', "token header")
     check(sent["headers"].get("content-type", "").startswith("application/json"), "JSON content type")
 
     RESPONSES["/Users/user%20one/Items/a%20b%2Fc/UserData"] = (200, b"{}", 0)
