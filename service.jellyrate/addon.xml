@@ -8,7 +8,7 @@
 -->
 <addon id="service.jellyrate"
        name="JellyRate"
-       version="1.5.2"
+       version="1.5.3"
        provider-name="c0def0rc0ffee">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
