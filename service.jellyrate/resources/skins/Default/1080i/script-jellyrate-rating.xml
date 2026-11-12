@@ -6,6 +6,11 @@
   star overlays (301 to 310) and a Cancel button (200). Control ids must
   match rating_dialog.py.
   </summary>
+  <remarks>
+  The filled star overlays carry no visible tag on purpose: a visible
+  condition in the XML overrides setVisible, which is how rating_dialog.py
+  shows and hides them, so a fixed false here kept every star grey.
+  </remarks>
 -->
 <window type="dialog">
     <defaultcontrol always="true">105</defaultcontrol>
@@ -153,52 +158,42 @@
         </control>
         <control type="image" id="301">
             <left>53</left><top>163</top><width>44</width><height>44</height>
-            <visible>false</visible>
             <texture>star_filled.png</texture>
         </control>
         <control type="image" id="302">
             <left>103</left><top>163</top><width>44</width><height>44</height>
-            <visible>false</visible>
             <texture>star_filled.png</texture>
         </control>
         <control type="image" id="303">
             <left>153</left><top>163</top><width>44</width><height>44</height>
-            <visible>false</visible>
             <texture>star_filled.png</texture>
         </control>
         <control type="image" id="304">
             <left>203</left><top>163</top><width>44</width><height>44</height>
-            <visible>false</visible>
             <texture>star_filled.png</texture>
         </control>
         <control type="image" id="305">
             <left>253</left><top>163</top><width>44</width><height>44</height>
-            <visible>false</visible>
             <texture>star_filled.png</texture>
         </control>
         <control type="image" id="306">
             <left>303</left><top>163</top><width>44</width><height>44</height>
-            <visible>false</visible>
             <texture>star_filled.png</texture>
         </control>
         <control type="image" id="307">
             <left>353</left><top>163</top><width>44</width><height>44</height>
-            <visible>false</visible>
             <texture>star_filled.png</texture>
         </control>
         <control type="image" id="308">
             <left>403</left><top>163</top><width>44</width><height>44</height>
-            <visible>false</visible>
             <texture>star_filled.png</texture>
         </control>
         <control type="image" id="309">
             <left>453</left><top>163</top><width>44</width><height>44</height>
-            <visible>false</visible>
             <texture>star_filled.png</texture>
         </control>
         <control type="image" id="310">
             <left>503</left><top>163</top><width>44</width><height>44</height>
-            <visible>false</visible>
             <texture>star_filled.png</texture>
         </control>
 

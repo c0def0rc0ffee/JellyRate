@@ -176,6 +176,24 @@ def test_rating_xml_ids():
     check(len(targets) > 0, "the XML carries navigation")
 
 
+def test_star_overlays_unconditioned():
+    """
+    <summary>The filled star overlays carry no visible tag, so setVisible from rating_dialog.py can show them.</summary>
+    <remarks>
+    Kodi lets a visible condition in the XML win over setVisible. A fixed false here kept
+    every star grey in the real dialog while the fake controls above still passed.
+    </remarks>
+    """
+    print("running test_star_overlays_unconditioned")
+    tree = ET.parse(os.path.join(SKIN_DIR, rating_dialog.SKIN_XML))
+    filled = {str(rating_dialog.STAR_FILLED_BASE + s)
+              for s in range(rating_dialog.MIN_RATING, rating_dialog.MAX_RATING + 1)}
+    for control in tree.iter("control"):
+        if control.get("id") in filled:
+            check(control.find("visible") is None,
+                  "filled star %s has a visible tag that overrides setVisible" % control.get("id"))
+
+
 def test_list_xml_ids():
     """<summary>The My Ratings window's ids in the Python all exist in its XML, and its navigation points at real controls.</summary>"""
     print("running test_list_xml_ids")
@@ -291,7 +309,7 @@ def main():
     Run every test and return the exit code: 0 when all passed, 1 otherwise.
     </summary>
     """
-    for test in (test_rating_xml_ids, test_list_xml_ids, test_star_navigation, test_ask_rating,
+    for test in (test_rating_xml_ids, test_star_overlays_unconditioned, test_list_xml_ids, test_star_navigation, test_ask_rating,
                  test_list_labels):
         test()
     if FAILURES:

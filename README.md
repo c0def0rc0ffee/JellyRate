@@ -1,113 +1,74 @@
-# JellyRate
+<p align="center"><img src="docs/screenshots/banner.png" width="100%" alt="JellyRate: rate what you just watched. Saved straight to Jellyfin. Tiles show a ten star rating row with eight stars filled, a Previously rated 8/10 card and a short list of rated titles."></p>
 
-A Kodi **service add-on** that pops up a **1-10 star rating when a movie or
-episode finishes playing**, then writes that score back to your **Jellyfin**
-server as a per-user rating.
+<p align="center"><a href="#quick-start">Quick start</a> · <a href="#how-it-works">How it works</a> · <a href="#settings">Settings</a> · <a href="#limitations">Limitations</a> · <a href="https://github.com/c0def0rc0ffee/JellyRate/releases">Changelog</a> · <a href="docs/">Docs</a></p>
 
-It piggybacks on the official [Jellyfin for Kodi](https://github.com/jellyfin/jellyfin-kodi)
-add-on (`plugin.video.jellyfin`): it reuses the login that add-on has already
-stored and uses its sync database to find the matching Jellyfin item, so there
-is **nothing to configure** as long as Jellyfin for Kodi is signed in.
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.5.2-blue" alt="Version 1.5.2">
+  <img src="https://img.shields.io/badge/licence-MIT-green" alt="MIT licence">
+  <img src="https://img.shields.io/badge/python-3-3776AB?logo=python&logoColor=white" alt="Python 3">
+  <img src="https://img.shields.io/badge/Kodi-19%2B-17B2E7?logo=kodi&logoColor=white" alt="Kodi 19 Matrix or newer">
+  <img src="https://img.shields.io/badge/requires-Jellyfin%20for%20Kodi-00A4DC?logo=jellyfin&logoColor=white" alt="Requires Jellyfin for Kodi">
+</p>
+
+A Kodi add-on that pops up a 1 to 10 star rating when a film or episode ends and saves it to Jellyfin, with no setup beyond Jellyfin for Kodi.
+
+<p align="center"><img src="docs/screenshots/rating-dialog.png" width="640" alt="The JellyRate star dialog in Kodi after the sample film Teacup Orbit, showing Previously rated: 8 / 10 with eight of ten stars filled and the eighth star focused."></p>
+
+## Quick start
+
+You need Kodi 19 (Matrix) or newer and [Jellyfin for Kodi](https://github.com/jellyfin/jellyfin-kodi) installed and **signed in**, in *add-on (native)* sync mode.
+
+1. Install the [DeliciousCoffee repository](https://github.com/c0def0rc0ffee/DeliciousCoffee), then JellyRate from it. Kodi keeps it updated.
+2. Or download `service.jellyrate-x.y.z.zip` from [Releases](https://github.com/c0def0rc0ffee/JellyRate/releases) and use **Settings > Add-ons > Install from zip file**. Flatpak Kodi: see [docs/flatpak.md](docs/flatpak.md).
+
+The service starts on its own. Watch something to the end.
+
+## What it does
+
+- **Prompts after playback:** ten stars appear once you have watched at least 70% (adjustable), at the end or when you stop early.
+- **Remembers your score:** a title you rated before opens on that score and shows *Previously rated: X / 10*.
+- **My Ratings browser:** open JellyRate from Program add-ons to see recently played titles with their scores and re-rate any of them.
+- **Optional JellyStat tie in:** scores also reach [JellyStat](https://github.com/c0def0rc0ffee/JellyStat), whose dashboard can manage JellyRate.
+
+<p align="center">
+  <img src="docs/screenshots/rating-dialog.png" width="49%" alt="The star dialog with eight of ten stars filled for a sample film rated 8 before.">
+  <img src="docs/screenshots/my-ratings.png" width="49%" alt="The My Ratings list in Kodi: seven sample films and episodes with their last played dates and scores, two of them unrated.">
+</p>
 
 ## How it works
 
-1. A background service watches for playback to end (`onPlayBackEnded`) or, if
-   enabled, for you to stop early (`onPlayBackStopped`).
-2. If you watched at least *N%* (configurable, default 70%), a star dialog
-   appears (ten stars: move left/right, press OK on a star, or click it). If
-   you've rated the item before, the stars start on your previous score and it
-   shows *"Previously rated: X/10"*, handy since the web UI does not display
-   this value.
-3. The Kodi item is mapped to its Jellyfin id via
-   `plugin.video.jellyfin`'s `jellyfin.db` (`kodi_id` + `media_type` to
-   `jellyfin_id`).
-4. The rating is sent to Jellyfin:
-   `POST /Users/{userId}/Items/{itemId}/UserData` with `{"Rating": <1-10>}`,
-   authenticated with the token from `data.json`.
+- A background service watches playback end or stop.
+- The Kodi item is matched to its Jellyfin id through Jellyfin for Kodi's own database.
+- The score is saved as your per user rating, using the login Jellyfin for Kodi already stored.
+- With a playlist or autoplay, prompts wait until nothing is playing, then appear in order.
 
-## My Ratings browser
-
-JellyRate also installs a **launchable list** of your recently played items
-(newest first) with the score next to each one, so you can see what you've
-rated and fix anything you skipped or exited by accident.
-
-- Open it from **Add-ons > Program add-ons > JellyRate**, or use the **Open**
-  button on the add-on's info page (or add it to Favourites).
-- The list is pulled live from Jellyfin (`SortBy=DatePlayed`), so it reflects
-  ratings made on any device. Unrated items are shown as not rated.
-- **Select any row** to open the same 1-10 star dialog (pre-filled with the
-  current score) and rate or re-rate it. **Back** closes the list.
-
-## Requirements
-
-- Kodi 19 (Matrix) or newer (Python 3).
-- [Jellyfin for Kodi](https://github.com/jellyfin/jellyfin-kodi)
-  (`plugin.video.jellyfin`) installed **and signed in**, in *add-on (native)*
-  sync mode so items live in Kodi's library with a Jellyfin id mapping.
-
-## Install
-
-1. In Kodi: **Settings > Add-ons > Install from zip file** and pick the
-   `service.jellyrate-x.y.z.zip` from the Releases page.
-2. The service starts automatically. Configure it under
-   **Add-ons > My add-ons > Program add-ons > JellyRate > Configure**.
-
-Or install the [DeliciousCoffee repository](https://github.com/c0def0rc0ffee/DeliciousCoffee) once and Kodi installs and updates it for you.
-
-For a sandboxed Flatpak Kodi (which cannot read a zip outside its sandbox),
-drop the folder straight into the add-ons directory instead:
-
-```
-ADDONS=~/.var/app/tv.kodi.Kodi/data/addons
-rm -rf "$ADDONS/service.jellyrate"
-unzip -o service.jellyrate-x.y.z.zip -d "$ADDONS"
-```
-
-Then restart Kodi.
+Detail, including the endpoint: [docs/how-it-works.md](docs/how-it-works.md).
 
 ## Settings
+
+Under **Add-ons > My add-ons > Program add-ons > JellyRate > Configure**.
 
 | Setting | Default | Meaning |
 |---|---|---|
 | Enable rating prompt | On | Master switch |
-| Also prompt when you stop early | On | Prompt on Stop, not just natural end |
+| Also prompt when you stop early | On | Prompt on Stop, not just the natural end |
 | Only prompt after watching at least (%) | 70 | Skip the prompt for brief plays |
-| Also save the score in JellyStat | On | When [JellyStat](https://github.com/c0def0rc0ffee/JellyStat) is installed, the score is recorded in its library mirror too, so the title leaves its rating queue. Best effort: JellyStat missing is normal, and the rating has already reached Jellyfin either way |
+| Also save the score in JellyStat | On | Records the score in JellyStat too, when installed |
 | Default rating shown on the stars | 5 | Where the stars start |
-| Allow JellyStat to manage JellyRate | On | Lets [JellyStat](https://github.com/c0def0rc0ffee/JellyStat)'s web dashboard on the same Kodi change these settings and re-rate recently played titles. JellyRate listens on that Kodi only, never on the network; JellyStat's own password guards the dashboard |
+| Allow JellyStat to manage JellyRate | On | Lets JellyStat's dashboard on this Kodi change settings and re-rate; local only |
 
-## Managing JellyRate from JellyStat's dashboard
+Full text: [docs/settings.md](docs/settings.md).
 
-With JellyStat installed and its web dashboard switched on, its **Add-ons**
-page shows JellyRate with two entries:
+## Works with JellyStat
 
-- **Settings** opens the five settings above as one form, checked against
-  the same limits as the Configure screen.
-- **Recent ratings** lists the 100 most recently played films and episodes
-  with their scores, straight from Jellyfin, like the My Ratings browser.
-  Opening one lets you give it a new score, which goes to Jellyfin and, when
-  that setting is on, to JellyStat as well. A score changed on another
-  device meanwhile is not saved over; reload and try again.
+With [JellyStat](https://github.com/c0def0rc0ffee/JellyStat) installed, its dashboard can change these settings and re-rate your 100 most recently played titles. Details: [docs/jellystat.md](docs/jellystat.md).
 
-Backup and restore on that page cover the settings. The scores themselves
-live in Jellyfin.
+## Limitations
 
-## Notes and limitations
-
-- **Numeric vs. the web UI:** the score is stored in Jellyfin's per-user
-  `UserData.Rating` field. It is real, persisted, and available through the
-  API and some clients, but the **Jellyfin web UI does not render it as a
-  star widget** (web only shows the community rating and the favourite toggle).
-  If you'd prefer the rating to drive the visible favourite (e.g. 8+ = favourite),
-  that is a small change in `resources/lib/jellyfin.py`.
-- Only library items that came from Jellyfin can be rated. Local-only items
-  have no Jellyfin id and are silently skipped.
-- Movies, episodes and music videos are supported.
-- With more than one server signed in through Jellyfin for Kodi, the one that
-  add-on used most recently is the one rated against, the same choice it makes
-  itself when it connects.
-- The prompt waits until nothing is playing. With a playlist or autoplay, the
-  stars for each episode appear once you stop or the run ends, in order.
+- The score is stored in Jellyfin's per user `UserData.Rating`. It is real and available through the API and some clients, but the Jellyfin web UI does not show it.
+- Only items that came from Jellyfin can be rated; local only items are skipped.
+- Films, episodes and music videos are supported.
+- With several servers signed in, the one Jellyfin for Kodi used most recently is rated against.
 
 ## Licence
 

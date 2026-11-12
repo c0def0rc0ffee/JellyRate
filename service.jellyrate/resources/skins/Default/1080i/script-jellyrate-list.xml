@@ -5,6 +5,11 @@
   hint line (601), column headings, the list (500) and a Close button
   (700). Control ids must match ratings_list.py.
   </summary>
+  <remarks>
+  The header uses font14, which both Estuary and Functional define small
+  enough for its 40 pixel label; font36 is 56 pixels in Functional and ran
+  into the hint line below it.
+  </remarks>
 -->
 <window type="dialog">
     <defaultcontrol always="true">500</defaultcontrol>
@@ -36,7 +41,7 @@
             <top>26</top>
             <width>1120</width>
             <height>40</height>
-            <font>font36</font>
+            <font>font14</font>
             <align>left</align>
             <textcolor>FFFFFFFF</textcolor>
             <label>JellyRate</label>
